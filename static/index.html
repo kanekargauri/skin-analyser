@@ -1,0 +1,378 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Skin Analyser</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background: #f5f4f0;
+      color: #1a1a1a;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 40px 20px;
+    }
+
+    h1 { font-size: 2rem; font-weight: 700; letter-spacing: -0.5px; margin-bottom: 6px; }
+    .subtitle { color: #666; font-size: 0.95rem; margin-bottom: 36px; }
+
+    /* Upload zone */
+    #drop-zone {
+      width: 100%;
+      max-width: 520px;
+      border: 2px dashed #ccc;
+      border-radius: 16px;
+      background: #fff;
+      padding: 48px 24px;
+      text-align: center;
+      cursor: pointer;
+      transition: border-color .2s, background .2s;
+    }
+    #drop-zone.over { border-color: #4f46e5; background: #f0efff; }
+    #drop-zone svg { color: #aaa; margin-bottom: 12px; }
+    #drop-zone p { color: #555; font-size: 0.95rem; }
+    #drop-zone span { color: #4f46e5; font-weight: 600; }
+    #file-input { display: none; }
+
+    #preview-wrap { margin-top: 16px; display: none; }
+    #preview { max-width: 100%; max-height: 280px; border-radius: 12px; object-fit: contain; }
+
+    #analyse-btn {
+      margin-top: 20px;
+      padding: 12px 36px;
+      background: #4f46e5;
+      color: #fff;
+      border: none;
+      border-radius: 10px;
+      font-size: 1rem;
+      font-weight: 600;
+      cursor: pointer;
+      display: none;
+      transition: background .2s;
+    }
+    #analyse-btn:hover { background: #3730a3; }
+    #analyse-btn:disabled { background: #9ca3af; cursor: not-allowed; }
+
+    /* Spinner */
+    #spinner {
+      display: none;
+      margin-top: 24px;
+      flex-direction: column;
+      align-items: center;
+      gap: 10px;
+      color: #555;
+    }
+    .spin {
+      width: 36px; height: 36px;
+      border: 4px solid #e0e0e0;
+      border-top-color: #4f46e5;
+      border-radius: 50%;
+      animation: spin .8s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* Results */
+    #results {
+      display: none;
+      width: 100%;
+      max-width: 640px;
+      margin-top: 36px;
+    }
+
+    .card {
+      background: #fff;
+      border-radius: 14px;
+      padding: 22px 24px;
+      margin-bottom: 16px;
+      box-shadow: 0 1px 4px rgba(0,0,0,.07);
+    }
+
+    .card h2 { font-size: 1rem; font-weight: 700; color: #4f46e5; margin-bottom: 14px; text-transform: uppercase; letter-spacing: .5px; }
+
+    /* Score ring */
+    .score-row { display: flex; align-items: center; gap: 24px; }
+    .ring { position: relative; width: 80px; height: 80px; flex-shrink: 0; }
+    .ring svg { transform: rotate(-90deg); }
+    .ring-bg { stroke: #e5e7eb; }
+    .ring-fg { stroke: #4f46e5; stroke-linecap: round; transition: stroke-dashoffset .6s ease; }
+    .ring-label {
+      position: absolute; inset: 0;
+      display: flex; flex-direction: column;
+      align-items: center; justify-content: center;
+      font-size: 1.4rem; font-weight: 700;
+    }
+    .ring-label small { font-size: 0.55rem; font-weight: 500; color: #999; }
+
+    .skin-type-badge {
+      display: inline-block;
+      background: #ede9fe;
+      color: #4f46e5;
+      border-radius: 20px;
+      padding: 4px 14px;
+      font-size: 0.85rem;
+      font-weight: 600;
+      text-transform: capitalize;
+    }
+
+    /* Concerns */
+    .concern { display: flex; gap: 12px; margin-bottom: 12px; }
+    .concern:last-child { margin-bottom: 0; }
+    .severity-dot {
+      width: 10px; height: 10px; border-radius: 50%;
+      margin-top: 5px; flex-shrink: 0;
+    }
+    .mild { background: #22c55e; }
+    .moderate { background: #f59e0b; }
+    .severe { background: #ef4444; }
+    .concern-name { font-weight: 600; font-size: 0.9rem; }
+    .concern-desc { color: #555; font-size: 0.85rem; margin-top: 2px; }
+    .severity-tag { font-size: 0.75rem; font-weight: 600; padding: 1px 8px; border-radius: 20px; display: inline-block; margin-left: 6px; }
+    .tag-mild { background: #dcfce7; color: #16a34a; }
+    .tag-moderate { background: #fef3c7; color: #d97706; }
+    .tag-severe { background: #fee2e2; color: #dc2626; }
+
+    /* Positives */
+    .positive-list { list-style: none; display: flex; flex-wrap: wrap; gap: 8px; }
+    .positive-list li {
+      background: #f0fdf4; color: #15803d;
+      border-radius: 20px; padding: 4px 12px;
+      font-size: 0.85rem; font-weight: 500;
+    }
+    .positive-list li::before { content: "✓  "; }
+
+    /* Recommendations */
+    .rec { margin-bottom: 12px; }
+    .rec:last-child { margin-bottom: 0; }
+    .rec-cat {
+      display: inline-block;
+      font-size: 0.72rem; font-weight: 700; letter-spacing: .5px;
+      text-transform: uppercase;
+      background: #f3f4f6; color: #374151;
+      border-radius: 6px; padding: 2px 8px; margin-bottom: 4px;
+    }
+    .rec-advice { font-size: 0.88rem; color: #333; }
+
+    /* Summary */
+    .summary-text { font-size: 0.95rem; color: #444; line-height: 1.6; }
+
+    /* Error */
+    #error-msg {
+      display: none;
+      margin-top: 16px;
+      background: #fee2e2;
+      color: #b91c1c;
+      border-radius: 10px;
+      padding: 14px 18px;
+      font-size: 0.9rem;
+      max-width: 520px;
+      width: 100%;
+    }
+
+    #reset-btn {
+      margin-top: 8px;
+      background: none;
+      border: 1px solid #ccc;
+      border-radius: 8px;
+      padding: 8px 20px;
+      cursor: pointer;
+      font-size: 0.9rem;
+      color: #555;
+      display: none;
+    }
+    #reset-btn:hover { background: #f3f4f6; }
+  </style>
+</head>
+<body>
+
+  <h1>Skin Analyser</h1>
+  <p class="subtitle">Upload a clear, well-lit photo of your face for an AI-powered skin analysis.</p>
+
+  <div id="drop-zone">
+    <svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
+      <path stroke-linecap="round" stroke-linejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5m-13.5-9L12 3m0 0l4.5 4.5M12 3v13.5" />
+    </svg>
+    <p><span>Click to upload</span> or drag &amp; drop</p>
+    <p style="margin-top:6px;font-size:.8rem;color:#aaa">JPEG · PNG · WebP · GIF &nbsp;·&nbsp; Max 10 MB</p>
+    <input type="file" id="file-input" accept="image/jpeg,image/jpg,image/png,image/webp,image/gif" />
+    <div id="preview-wrap"><img id="preview" alt="preview" /></div>
+  </div>
+
+  <button id="analyse-btn">Analyse Skin</button>
+  <button id="reset-btn">Analyse another photo</button>
+
+  <div id="spinner">
+    <div class="spin"></div>
+    <span>Analysing your skin…</span>
+  </div>
+
+  <div id="error-msg"></div>
+
+  <div id="results"></div>
+
+<script>
+  const dropZone = document.getElementById('drop-zone');
+  const fileInput = document.getElementById('file-input');
+  const preview = document.getElementById('preview');
+  const previewWrap = document.getElementById('preview-wrap');
+  const analyseBtn = document.getElementById('analyse-btn');
+  const resetBtn = document.getElementById('reset-btn');
+  const spinner = document.getElementById('spinner');
+  const results = document.getElementById('results');
+  const errorMsg = document.getElementById('error-msg');
+
+  let selectedFile = null;
+
+  dropZone.addEventListener('click', () => fileInput.click());
+  dropZone.addEventListener('dragover', e => { e.preventDefault(); dropZone.classList.add('over'); });
+  dropZone.addEventListener('dragleave', () => dropZone.classList.remove('over'));
+  dropZone.addEventListener('drop', e => {
+    e.preventDefault();
+    dropZone.classList.remove('over');
+    const f = e.dataTransfer.files[0];
+    if (f) loadFile(f);
+  });
+  fileInput.addEventListener('change', () => { if (fileInput.files[0]) loadFile(fileInput.files[0]); });
+
+  function loadFile(file) {
+    selectedFile = file;
+    const url = URL.createObjectURL(file);
+    preview.src = url;
+    previewWrap.style.display = 'block';
+    analyseBtn.style.display = 'inline-block';
+    results.style.display = 'none';
+    errorMsg.style.display = 'none';
+    resetBtn.style.display = 'none';
+  }
+
+  analyseBtn.addEventListener('click', async () => {
+    if (!selectedFile) return;
+
+    analyseBtn.disabled = true;
+    spinner.style.display = 'flex';
+    results.style.display = 'none';
+    errorMsg.style.display = 'none';
+
+    const form = new FormData();
+    form.append('file', selectedFile);
+
+    try {
+      const res = await fetch('/analyse', { method: 'POST', body: form });
+      const data = await res.json();
+
+      if (!res.ok) {
+        showError(data.detail || 'Something went wrong.');
+        return;
+      }
+
+      renderResults(data);
+    } catch (e) {
+      showError('Network error. Is the server running?');
+    } finally {
+      analyseBtn.disabled = false;
+      spinner.style.display = 'none';
+    }
+  });
+
+  resetBtn.addEventListener('click', () => {
+    selectedFile = null;
+    fileInput.value = '';
+    preview.src = '';
+    previewWrap.style.display = 'none';
+    analyseBtn.style.display = 'none';
+    resetBtn.style.display = 'none';
+    results.style.display = 'none';
+    errorMsg.style.display = 'none';
+  });
+
+  function showError(msg) {
+    errorMsg.textContent = msg;
+    errorMsg.style.display = 'block';
+    resetBtn.style.display = 'inline-block';
+  }
+
+  function renderResults(d) {
+    const score = d.overall_health_score || 0;
+    const radius = 32;
+    const circ = 2 * Math.PI * radius;
+    const offset = circ - (score / 10) * circ;
+
+    const concerns = (d.detected_concerns || []).map(c => `
+      <div class="concern">
+        <div class="severity-dot ${c.severity}"></div>
+        <div>
+          <div class="concern-name">${esc(c.name)}<span class="severity-tag tag-${c.severity}">${esc(c.severity)}</span></div>
+          <div class="concern-desc">${esc(c.description)}</div>
+        </div>
+      </div>`).join('') || '<p style="color:#888;font-size:.88rem">No significant concerns detected.</p>';
+
+    const positives = (d.positive_attributes || []).map(p => `<li>${esc(p)}</li>`).join('');
+
+    const recs = (d.recommendations || []).map(r => `
+      <div class="rec">
+        <div class="rec-cat">${esc(r.category)}</div>
+        <div class="rec-advice">${esc(r.advice)}</div>
+      </div>`).join('');
+
+    results.innerHTML = `
+      <div class="card">
+        <h2>Overview</h2>
+        <div class="score-row">
+          <div class="ring">
+            <svg width="80" height="80" viewBox="0 0 80 80">
+              <circle class="ring-bg" cx="40" cy="40" r="${radius}" stroke-width="8" fill="none"/>
+              <circle class="ring-fg" cx="40" cy="40" r="${radius}" stroke-width="8" fill="none"
+                stroke-dasharray="${circ}" stroke-dashoffset="${offset}"/>
+            </svg>
+            <div class="ring-label">${score}<small>/10</small></div>
+          </div>
+          <div>
+            <div style="font-size:.85rem;color:#666;margin-bottom:6px">Skin Type</div>
+            <div class="skin-type-badge">${esc(d.skin_type || '—')}</div>
+            <div style="font-size:.85rem;color:#666;margin-top:10px">Health Score</div>
+          </div>
+        </div>
+        ${d.summary ? `<p class="summary-text" style="margin-top:16px">${esc(d.summary)}</p>` : ''}
+      </div>
+
+      ${d.detected_concerns && d.detected_concerns.length ? `
+      <div class="card">
+        <h2>Detected Concerns</h2>
+        ${concerns}
+      </div>` : `
+      <div class="card">
+        <h2>Detected Concerns</h2>
+        <p style="color:#888;font-size:.88rem">No significant concerns detected.</p>
+      </div>`}
+
+      ${positives ? `
+      <div class="card">
+        <h2>Positive Attributes</h2>
+        <ul class="positive-list">${positives}</ul>
+      </div>` : ''}
+
+      <div class="card">
+        <h2>Recommendations</h2>
+        ${recs || '<p style="color:#888;font-size:.88rem">No specific recommendations at this time.</p>'}
+      </div>
+    `;
+
+    results.style.display = 'block';
+    resetBtn.style.display = 'inline-block';
+    results.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }
+
+  function esc(str) {
+    return String(str ?? '')
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;');
+  }
+</script>
+</body>
+</html>
